@@ -1,7 +1,7 @@
 """Diagnosis Service for PhysioMind CDSS.
 
 This module provides the core diagnosis functionality using
-OpenAI GPT-4o with structured outputs via Pydantic models.
+Google Gemini with structured outputs via Pydantic models.
 """
 
 import json
@@ -23,14 +23,14 @@ from app.models import (
 class DiagnosisService:
     """Service for generating AI-powered diagnoses.
     
-    Uses OpenAI's GPT-4o model with structured outputs to generate
+    Uses Google's Gemini model with structured outputs to generate
     evidence-based diagnostic reports for physiotherapy patients.
     """
     
     def __init__(self):
         """Initialize the diagnosis service."""
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        self.model = "gpt-4o"
+        self.api_key = os.getenv("GOOGLE_API_KEY")
+        self.model = "gemini-1.5-flash"
         self._medical_protocols: list[str] = []
         
     async def _retrieve_medical_protocols(
@@ -142,7 +142,7 @@ Please analyze this assessment and provide a structured diagnostic report."""
         """Analyze patient data and generate diagnosis.
         
         Uses RAG to retrieve relevant protocols, then generates
-        a structured diagnostic response using GPT-4o.
+        a structured diagnostic response using Google Gemini.
         
         Args:
             patient_data: The patient assessment input data.
@@ -160,25 +160,25 @@ Please analyze this assessment and provide a structured diagnostic report."""
             patient_data.subjective.symptom_description,
         )
         
-        # In production, this would call OpenAI API with structured outputs
+        # In production, this would call Google Gemini API with structured outputs
         # For now, we generate a mock response that matches our schema
         if self.api_key:
-            # Production: Call OpenAI API
-            return await self._call_openai(patient_data, protocols)
+            # Production: Call Gemini API
+            return await self._call_gemini(patient_data, protocols)
         else:
             # Development: Return mock diagnosis
             return self._generate_mock_diagnosis(patient_data)
     
-    async def _call_openai(
+    async def _call_gemini(
         self, 
         patient_data: PatientInput, 
         protocols: list[str]
     ) -> DiagnosisResponse:
-        """Call OpenAI API with structured outputs.
+        """Call Google Gemini API with structured outputs.
 
-        OpenAI's Structured Outputs feature ensures the model returns
-        responses that conform to a specified JSON schema (Pydantic model).
-        This guarantees type-safe, validated responses.
+        Gemini's generation config with response_mime_type and response_schema
+        ensures the model returns responses that conform to a specified JSON
+        schema (Pydantic model). This guarantees type-safe, validated responses.
 
         Args:
             patient_data: The patient assessment input.
@@ -191,39 +191,34 @@ Please analyze this assessment and provide a structured diagnostic report."""
             ConnectionError: If the API call fails.
         """
         try:
-            from openai import AsyncOpenAI
+            import google.generativeai as genai
             
-            client = AsyncOpenAI(api_key=self.api_key)
+            genai.configure(api_key=self.api_key)
             
             system_prompt = self._build_system_prompt(protocols)
             user_prompt = self._build_user_prompt(patient_data)
             
-            # Use structured outputs with response_format
-            response = await client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "diagnosis_response",
-                        "strict": True,
-                        "schema": DiagnosisResponse.model_json_schema(),
-                    },
-                },
-                temperature=0.3,  # Lower temperature for more consistent outputs
+            # Configure the model with structured output
+            model = genai.GenerativeModel(
+                model_name=self.model,
+                system_instruction=system_prompt,
+                generation_config=genai.GenerationConfig(
+                    response_mime_type="application/json",
+                    response_schema=DiagnosisResponse,
+                    temperature=0.3,  # Lower temperature for more consistent outputs
+                ),
             )
             
-            content = response.choices[0].message.content
+            response = await model.generate_content_async(user_prompt)
+            
+            content = response.text
             if content:
                 return DiagnosisResponse.model_validate_json(content)
             else:
                 raise ConnectionError("Empty response from AI service")
             
         except ImportError:
-            raise ConnectionError("OpenAI package not installed")
+            raise ConnectionError("Google Generative AI package not installed")
         except Exception as e:
             # If API call fails, fall back to mock response in development
             if os.getenv("ENVIRONMENT") == "development":
