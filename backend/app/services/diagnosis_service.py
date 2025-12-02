@@ -175,11 +175,15 @@ Please analyze this assessment and provide a structured diagnostic report."""
         protocols: list[str]
     ) -> DiagnosisResponse:
         """Call OpenAI API with structured outputs.
-        
+
+        OpenAI's Structured Outputs feature ensures the model returns
+        responses that conform to a specified JSON schema (Pydantic model).
+        This guarantees type-safe, validated responses.
+
         Args:
             patient_data: The patient assessment input.
             protocols: Retrieved medical protocols for context.
-            
+
         Returns:
             Parsed DiagnosisResponse from the AI.
             

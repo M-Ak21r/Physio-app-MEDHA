@@ -384,8 +384,8 @@ function EmptyState() {
         Ready to Analyze
       </h3>
       <p className="text-slate-500 max-w-md">
-        Enter patient assessment data in the form on the left and click 
-        &quot;Generate Diagnosis&quot; to receive an AI-powered clinical decision support report.
+        Enter patient assessment data in the form on the left and click{" "}
+        {'"'}Generate Diagnosis{'"'} to receive an AI-powered clinical decision support report.
       </p>
     </motion.div>
   );

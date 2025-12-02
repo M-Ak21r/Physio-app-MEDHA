@@ -125,7 +125,7 @@ export function PatientInputForm() {
               <CardTitle className="text-lg">Subjective History</CardTitle>
             </div>
             <CardDescription>
-              Patient&apos;s description of their condition
+              Patient{"'"}s description of their condition
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
