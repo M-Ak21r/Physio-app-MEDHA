@@ -25,7 +25,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useDiagnosisStore } from '@/stores';
-import { useAnalyzePatient } from '@/hooks';
+import { useAnalyzePatient, useHealthCheck } from '@/hooks';
 
 /** Common special tests for musculoskeletal assessment */
 const COMMON_SPECIAL_TESTS = [
@@ -68,9 +68,12 @@ export function PatientInputForm() {
     setDiagnosisResult,
     setError,
     isAnalyzing,
+    error,
   } = useDiagnosisStore();
   
   const analyzePatient = useAnalyzePatient();
+  const { data: healthData } = useHealthCheck();
+  
   const [selectedTests, setSelectedTests] = useState<string[]>(
     patientInput.objective.special_tests || []
   );
@@ -92,7 +95,9 @@ export function PatientInputForm() {
       const result = await analyzePatient.mutateAsync(patientInput);
       setDiagnosisResult(result.diagnosis);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred during analysis');
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred during analysis';
+      setError(errorMessage);
+      console.error('Analysis error:', err);
     } finally {
       setIsAnalyzing(false);
     }
@@ -111,6 +116,38 @@ export function PatientInputForm() {
   
   return (
     <form onSubmit={handleSubmit} className="space-y-6 p-6">
+      {/* Show error if API is disconnected */}
+      {!healthData && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3 text-yellow-700">
+              <AlertCircle className="h-5 w-5" />
+              <div>
+                <p className="font-medium">Backend Connection Issue</p>
+                <p className="text-sm">
+                  Unable to connect to backend API. Please ensure the server is running on port 8000.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Show analysis error */}
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3 text-red-700">
+              <AlertCircle className="h-5 w-5" />
+              <div>
+                <p className="font-medium">Analysis Error</p>
+                <p className="text-sm">{error}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
       {/* Subjective History Section */}
       <motion.div
         variants={sectionVariants}

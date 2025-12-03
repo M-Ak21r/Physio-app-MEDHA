@@ -1,7 +1,7 @@
 """Diagnosis Service for PhysioMind CDSS.
 
 This module provides the core diagnosis functionality using
-OpenAI GPT-4o with structured outputs via Pydantic models.
+Google Gemini with structured outputs via Pydantic models.
 """
 
 import json
@@ -23,14 +23,14 @@ from app.models import (
 class DiagnosisService:
     """Service for generating AI-powered diagnoses.
     
-    Uses OpenAI's GPT-4o model with structured outputs to generate
+    Uses Google's Gemini model with structured outputs to generate
     evidence-based diagnostic reports for physiotherapy patients.
     """
     
     def __init__(self):
         """Initialize the diagnosis service."""
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        self.model = "gpt-4o"
+        self.api_key = os.getenv("GOOGLE_API_KEY")
+        self.model = "gemini-1.5-flash"
         self._medical_protocols: list[str] = []
         
     async def _retrieve_medical_protocols(
@@ -141,9 +141,6 @@ Please analyze this assessment and provide a structured diagnostic report."""
     async def analyze(self, patient_data: PatientInput) -> DiagnosisResponse:
         """Analyze patient data and generate diagnosis.
         
-        Uses RAG to retrieve relevant protocols, then generates
-        a structured diagnostic response using GPT-4o.
-        
         Args:
             patient_data: The patient assessment input data.
             
@@ -152,33 +149,29 @@ Please analyze this assessment and provide a structured diagnostic report."""
             
         Raises:
             ConnectionError: If the AI service is unavailable.
-            ValueError: If patient data is invalid.
+            ValueError: If patient data is invalid or API key is missing.
         """
+        # Check for API key first
+        if not self.api_key:
+            raise ValueError(
+                "Google API key not configured. Please set GOOGLE_API_KEY environment variable."
+            )
+        
         # Retrieve relevant medical protocols (RAG simulation)
         protocols = await self._retrieve_medical_protocols(
             patient_data.objective.affected_region,
             patient_data.subjective.symptom_description,
         )
         
-        # In production, this would call OpenAI API with structured outputs
-        # For now, we generate a mock response that matches our schema
-        if self.api_key:
-            # Production: Call OpenAI API
-            return await self._call_openai(patient_data, protocols)
-        else:
-            # Development: Return mock diagnosis
-            return self._generate_mock_diagnosis(patient_data)
+        # Always call the real API (no mock fallback)
+        return await self._call_gemini(patient_data, protocols)
     
-    async def _call_openai(
+    async def _call_gemini(
         self, 
         patient_data: PatientInput, 
         protocols: list[str]
     ) -> DiagnosisResponse:
-        """Call OpenAI API with structured outputs.
-
-        OpenAI's Structured Outputs feature ensures the model returns
-        responses that conform to a specified JSON schema (Pydantic model).
-        This guarantees type-safe, validated responses.
+        """Call Google Gemini API with structured outputs.
 
         Args:
             patient_data: The patient assessment input.
@@ -189,46 +182,52 @@ Please analyze this assessment and provide a structured diagnostic report."""
             
         Raises:
             ConnectionError: If the API call fails.
+            ImportError: If google-generativeai is not installed.
         """
         try:
-            from openai import AsyncOpenAI
-            
-            client = AsyncOpenAI(api_key=self.api_key)
+            import google.generativeai as genai
+        except ImportError:
+            raise ImportError(
+                "Google Generative AI package not installed. "
+                "Run: pip install google-generativeai"
+            )
+        
+        try:
+            genai.configure(api_key=self.api_key)
             
             system_prompt = self._build_system_prompt(protocols)
             user_prompt = self._build_user_prompt(patient_data)
             
-            # Use structured outputs with response_format
-            response = await client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "diagnosis_response",
-                        "strict": True,
-                        "schema": DiagnosisResponse.model_json_schema(),
-                    },
-                },
-                temperature=0.3,  # Lower temperature for more consistent outputs
+            # Configure the model with structured output
+            model = genai.GenerativeModel(
+                model_name=self.model,
+                system_instruction=system_prompt,
+                generation_config=genai.GenerationConfig(
+                    response_mime_type="application/json",
+                    response_schema=DiagnosisResponse,
+                    temperature=0.3,
+                ),
             )
             
-            content = response.choices[0].message.content
-            if content:
-                return DiagnosisResponse.model_validate_json(content)
-            else:
-                raise ConnectionError("Empty response from AI service")
+            response = await model.generate_content_async(user_prompt)
             
-        except ImportError:
-            raise ConnectionError("OpenAI package not installed")
+            if not response.text:
+                raise ConnectionError("Empty response from Gemini API")
+            
+            return DiagnosisResponse.model_validate_json(response.text)
+            
         except Exception as e:
-            # If API call fails, fall back to mock response in development
-            if os.getenv("ENVIRONMENT") == "development":
-                return self._generate_mock_diagnosis(patient_data)
-            raise ConnectionError(f"AI service error: {str(e)}")
+            error_msg = str(e)
+            if "API_KEY" in error_msg.upper() or "INVALID" in error_msg.upper():
+                raise ConnectionError(
+                    "Invalid Google API key. Please check your GOOGLE_API_KEY environment variable."
+                )
+            elif "QUOTA" in error_msg.upper() or "RATE" in error_msg.upper():
+                raise ConnectionError(
+                    "API quota exceeded or rate limited. Please try again later."
+                )
+            else:
+                raise ConnectionError(f"Gemini API error: {error_msg}")
     
     def _generate_mock_diagnosis(
         self, 
