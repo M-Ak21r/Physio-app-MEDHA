@@ -4,12 +4,23 @@ This module initializes the FastAPI application with all routes,
 middleware, and configuration for the Clinical Decision Support System.
 """
 
+import os
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes import analyze_router
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Verify API key is loaded
+if not os.getenv("GOOGLE_API_KEY"):
+    print("WARNING: GOOGLE_API_KEY not found in environment variables!")
+else:
+    print(f"✓ GOOGLE_API_KEY loaded (starts with: {os.getenv('GOOGLE_API_KEY')[:10]}...)")
 
 
 @asynccontextmanager

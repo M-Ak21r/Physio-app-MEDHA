@@ -1,16 +1,28 @@
 'use client';
 
-/**
- * TopBar - Top navigation bar with user profile and actions.
- */
-
 import { motion } from 'framer-motion';
 import { Bell, HelpCircle, User } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useHealthCheck } from '@/hooks';
 
 export function TopBar() {
+  const { data: healthData, isLoading, isError } = useHealthCheck();
+  
+  // Determine API status
+  const getApiStatus = () => {
+    if (isLoading) {
+      return { variant: 'secondary' as const, text: 'Checking...', showPulse: false };
+    }
+    if (isError || !healthData) {
+      return { variant: 'danger' as const, text: 'API Disconnected', showPulse: false };
+    }
+    return { variant: 'success' as const, text: 'API Connected', showPulse: true };
+  };
+  
+  const apiStatus = getApiStatus();
+  
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6">
       {/* Page Title */}
@@ -30,9 +42,11 @@ export function TopBar() {
       {/* Actions */}
       <div className="flex items-center gap-2">
         {/* API Status */}
-        <Badge variant="success" className="hidden sm:flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          API Connected
+        <Badge variant={apiStatus.variant} className="hidden sm:flex items-center gap-1">
+          {apiStatus.showPulse && (
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          )}
+          {apiStatus.text}
         </Badge>
         
         {/* Notifications */}
